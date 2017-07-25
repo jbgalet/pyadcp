@@ -129,11 +129,11 @@ class Adcp(object):
             cur = result.current()
             return int(cur['id'])
 
-    def search(self, name: str, lang: str = 'en') -> Iterator[Record]:
+    def search(self, name: str, lang: str = 'en', operator: str = 'STARTS WITH') -> Iterator[Record]:
         search_str = TRANSLATION_TABLE.get(lang, dict()).get(name, name)
 
         result = self.neo4j.run(
-            'MATCH (n) WHERE n.name STARTS WITH {name} RETURN DISTINCT n.name as name, id(n) as id',
+            'MATCH (n) WHERE n.name %s {name} RETURN DISTINCT n.name as name, id(n) as id' % operator,
             name=search_str)
         while result.forward():
             cur = result.current()
@@ -147,7 +147,7 @@ class Adcp(object):
                     for rel in self.__get_rels(relations, target):
                         yield dict(source=source, target=rel['target'], type=rel['type'])
 
-    def __denyace(self, graph: Subgraph) -> Subgraph:
+    def __denyace(self, graph: Subgraph, graph_target: str) -> Subgraph:
         if not self.__workdir:
             self.logger.warning('No denyace applied - dump directory not provided')
             return graph
@@ -194,16 +194,31 @@ class Adcp(object):
             rels[source][target].append(edge.type())
 
         # Step 3 : map denied to relationships
+        nolink_nodes = []
         for source in rels:
+            path_count = 0
+            denies = 0
             for rel in self.__get_rels(rels, source):
+                if rel['target'] == graph_target:
+                    path_count += 1
                 denied = [x for x in self.__denied_ace
                           if x['dnMaster:START_ID'] == rel['source']
                           and x['dnSlave:END_ID'] == rel['target']
                           and x['keyword:TYPE'] == rel['type']]
                 if len(denied) > 0:
+                    path_count -= 1
+                    denies += 1
                     deny_edge = Relationship(nodes[rel['source']], 'DENY_{}'.format(rel['type']), nodes[rel['target']],
                                              DENY=1)
                     graph |= deny_edge
+
+            if path_count == 0 and denies > 0:
+                nolink_nodes.append(source)
+
+        # Step 4 : tag unlinked nodes
+        for node in graph.nodes():
+            if node['name'] in nolink_nodes:
+                node['NO_LINKS'] = True
 
         return graph
 
@@ -298,7 +313,7 @@ class Adcp(object):
 
         # Step 2 : Apply DENY ACE
         start = timer()
-        filtered_graph = self.__denyace(graph)
+        filtered_graph = self.__denyace(graph, node['name'])
         end = timer()
         self.logger.debug('[perf] Deny ACE : %f', (end - start))
         self.logger.info('Filtered graph: %d nodes - %d edges', order(filtered_graph), size(filtered_graph))
