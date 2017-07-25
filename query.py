@@ -132,7 +132,11 @@ def graph(ctx, search, direction, outfile):
     node_indx = dict()
 
     click.secho('[+] Start Export', fg='green')
-    for indx, node in enumerate(control_graph.nodes()):
+    indx = 0
+    for node in control_graph.nodes():
+        if not ctx.obj['options'].get('deny'):
+            if node['NO_LINKS']:
+                continue
         nodes.append(dict(
             id=node['id'],
             name=node['name'],
@@ -140,6 +144,7 @@ def graph(ctx, search, direction, outfile):
             type=[x for x in node.labels()][0],
         ))
         node_indx[node['name']] = indx
+        indx += 1
 
     for edge in control_graph.relationships():
         rels = edge.type().split(',')
@@ -151,14 +156,20 @@ def graph(ctx, search, direction, outfile):
             for rel in [x for x in rels]:
                 tmp = rel.split('_', maxsplit=1)
                 if tmp[0] == 'DENY':
-                    rels.remove(rel)
-                    rels.remove(tmp[1])
+                    if rel in rels:
+                        rels.remove(rel)
+                    if tmp[1] in rels:
+                        rels.remove(tmp[1])
 
-        edges.append(dict(
-            source=node_indx[edge.start_node()['name']],
-            target=node_indx[edge.end_node()['name']],
-            rels=rels
-        ))
+        source = node_indx.get(edge.start_node()['name'])
+        target = node_indx.get(edge.end_node()['name'])
+
+        if source is not None and target is not None and len(rels) > 0:
+            edges.append(dict(
+                source=source,
+                target=target,
+                rels=rels
+            ))
 
     outfile.write(json.dumps(dict(nodes=nodes, links=edges)))
     click.secho('[+] ControlGraph written to {}'.format(outfile.name), fg='green')
