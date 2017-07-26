@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+from pathlib import Path
 from timeit import default_timer as timer
 
 import click
@@ -93,26 +94,31 @@ def cli(ctx, **kwargs):
 def graph(ctx, search, direction, outfile):
     adcp = ctx.obj['adcp']  # type: Adcp
 
-    matches = [x for x in adcp.search(search)]
+    try:
+        # Use direct node_id
+        root_item = adcp.get_node(int(search))
+    except ValueError:
+        # Search for node_name or alias
+        matches = [x for x in adcp.search(search)]
 
-    if len(matches) == 0:
-        click.secho('[x] Node not found ({})'.format(search), fg='red')
-        return 1
-    elif len(matches) == 1:
-        root_item = matches[0]
-    else:
-        if ctx.obj['noprompt']:
-            click.secho('[!] Multiple items and prompt disabled, exiting', fg='red')
+        if len(matches) == 0:
+            click.secho('[x] Node not found ({})'.format(search), fg='red')
             return 1
-        click.secho('[!] Multiple choices:', fg='yellow')
-        for indx, item in enumerate(matches):
-            click.echo('[{:4}] {}'.format(indx, item['name']))
-        value = click.prompt('Choice: ', type=int)
-        if value >= len(matches):
-            click.secho('[!] Bad value', fg='red')
-            return 1
+        elif len(matches) == 1:
+            root_item = matches[0]
         else:
-            root_item = matches[value]
+            if ctx.obj['noprompt']:
+                click.secho('[!] Multiple items and prompt disabled, exiting', fg='red')
+                return 1
+            click.secho('[!] Multiple choices:', fg='yellow')
+            for indx, item in enumerate(matches):
+                click.echo('[{:4}] {}'.format(indx, item['name']))
+            value = click.prompt('Choice: ', type=int)
+            if value >= len(matches):
+                click.secho('[!] Bad value', fg='red')
+                return 1
+            else:
+                root_item = matches[value]
 
     click.secho('[+] Building ControlGraph using root item {}'.format(root_item), fg='green')
 
@@ -181,6 +187,67 @@ def list_aliases(ctx):
     lang = ctx.obj['lang']
     for key, value in TRANSLATION_TABLE[lang].items():
         click.secho('{}\t{}'.format(key, value))
+
+
+@cli.command()
+@click.pass_context
+@click.argument('needle')
+def search(ctx, needle):
+    adcp = ctx.obj['adcp']  # type: Adcp
+
+    click.secho('[+] Results for {}'.format(needle), fg='green')
+
+    for item in adcp.search(needle, operator='CONTAINS'):
+        click.secho('{}\t{}'.format(item['id'], item['name']))
+
+
+FULL_TABLE = {
+    'adm_dom': {'direction': 'to'},
+    'adm_sch': {'direction': 'to'},
+    'adm_ent': {'direction': 'to'},
+    'adms': {'direction': 'to'},
+    'adm': {'direction': 'to'},
+
+    'dc': {'direction': 'to'},
+    'rodc': {'direction': 'to'},
+    'cdc': {'direction': 'to'},
+    'erodc': {'direction': 'to'},
+
+    'accop': {'direction': 'to'},
+    'srvop': {'direction': 'to'},
+    'backop': {'direction': 'to'},
+    'printop': {'direction': 'to'},
+    'cryptop': {'direction': 'to'},
+    'netop': {'direction': 'to'},
+    'axxop': {'direction': 'to'},
+
+    'dom_usr': {'direction': 'from'},
+    'dom_cmp': {'direction': 'from'},
+    'dom_gue': {'direction': 'from'},
+    'usr': {'direction': 'from'},
+    'guests': {'direction': 'from'},
+    'guest': {'direction': 'from'},
+    'prew2k': {'direction': 'from'},
+    'waac': {'direction': 'from'},
+
+    'certpub': {'direction': 'to'},
+    'gpoco': {'direction': 'to'},
+    'incftb': {'direction': 'to'},
+    'krbtgt': {'direction': 'to'},
+}
+
+
+@cli.command()
+@click.pass_context
+@click.argument('outdir', type=click.Path(file_okay=False, dir_okay=True, readable=True, writable=True, exists=False),
+                default='out')
+def full(ctx, outdir):
+    outpath = Path(outdir)
+    outpath.mkdir(exist_ok=True)
+
+    for key, data in FULL_TABLE.items():
+        with (outpath / '{}_{}_short.json'.format(key, data['direction'])).open('w') as ofile:
+            ctx.invoke(graph, search=key, direction=data['direction'], outfile=ofile)
 
 
 if __name__ == '__main__':

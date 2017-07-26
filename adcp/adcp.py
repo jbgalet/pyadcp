@@ -129,6 +129,14 @@ class Adcp(object):
             cur = result.current()
             return int(cur['id'])
 
+    def get_node(self, id: int) -> Record:
+        result = self.neo4j.run(
+            'MATCH (n) WHERE id(n) = {id} RETURN n.name as name, id(n) as id',
+            id=id)
+        while result.forward():
+            cur = result.current()
+            return cur
+
     def search(self, name: str, lang: str = 'en', operator: str = 'STARTS WITH') -> Iterator[Record]:
         search_str = TRANSLATION_TABLE.get(lang, dict()).get(name, name)
 
