@@ -182,10 +182,14 @@ class Adcp(object):
             target = edge.end_node()['name']
             nodes.setdefault(target, edge.end_node())
 
-            denied = [x for x in self.__denied_ace
-                      if x['dnMaster:START_ID'] == source
-                      and x['dnSlave:END_ID'] == target
-                      and x['keyword:TYPE'] == edge.type()]
+            denied = []
+            for x in self.__denied_ace:
+                try:
+                    if x['dnMaster:START_ID'] == source and x['dnSlave:END_ID'] == target and x['keyword:TYPE'] == edge.type():
+                        denied.append(x)
+                except:
+                    if x[':START_ID'] == source and x[':END_ID'] == target and x[':TYPE'] == edge.type():
+                        denied.append(x)
 
             if len(denied) > 0:
                 self.logger.debug('DENY edge (%s) --[%s]--> (%s)', source, edge.type(), target)
@@ -209,10 +213,16 @@ class Adcp(object):
             for rel in self.__get_rels(rels, source):
                 if rel['target'] == graph_target:
                     path_count += 1
-                denied = [x for x in self.__denied_ace
-                          if x['dnMaster:START_ID'] == rel['source']
-                          and x['dnSlave:END_ID'] == rel['target']
-                          and x['keyword:TYPE'] == rel['type']]
+
+                denied = []
+                for x in self.__denied_ace:
+                    try:
+                        if x['dnMaster:START_ID'] == source and x['dnSlave:END_ID'] == target and x['keyword:TYPE'] == edge.type():
+                            denied.append(x)
+                    except:
+                        if x[':START_ID'] == source and x[':END_ID'] == target and x[':TYPE'] == edge.type():
+                            denied.append(x)
+
                 if len(denied) > 0:
                     path_count -= 1
                     denies += 1
