@@ -139,7 +139,7 @@ def graph(ctx, search, direction, outfile):
 
     click.secho('[+] Start Export', fg='green')
     indx = 0
-    for node in control_graph.nodes():
+    for node in control_graph.nodes:
         if not ctx.obj['options'].get('deny'):
             if node['NO_LINKS']:
                 continue
@@ -147,13 +147,13 @@ def graph(ctx, search, direction, outfile):
             id=node['id'],
             name=node['name'],
             shortname=node['name'].split(',')[0],
-            type=[x for x in node.labels()][0],
+            type=[x for x in node.labels][0],
         ))
         node_indx[node['name']] = indx
         indx += 1
 
-    for edge in control_graph.relationships():
-        rels = edge.type().split(',')
+    for edge in control_graph.relationships:
+        rels = type(edge).__name__.split(',')
 
         if ctx.obj['options'].get('deny'):
             if edge['DENY']:
@@ -167,8 +167,8 @@ def graph(ctx, search, direction, outfile):
                     if tmp[1] in rels:
                         rels.remove(tmp[1])
 
-        source = node_indx.get(edge.start_node()['name'])
-        target = node_indx.get(edge.end_node()['name'])
+        source = node_indx.get(edge.start_node['name'])
+        target = node_indx.get(edge.end_node['name'])
 
         if source is not None and target is not None and len(rels) > 0:
             edges.append(dict(

@@ -4,7 +4,7 @@ from pathlib import Path
 from timeit import default_timer as timer
 from typing import Iterator, Union, Optional, Dict
 
-from py2neo import Graph, Record, Subgraph, order, size, Relationship
+from py2neo import Graph, Record, Subgraph, Relationship
 
 TRANSLATION_TABLE = {
     'en': {
@@ -126,7 +126,7 @@ class Adcp(object):
             'MATCH (n) WHERE n.name = {name} RETURN id(n) as id',
             name=name)
         while result.forward():
-            cur = result.current()
+            cur = result.current
             return int(cur['id'])
 
     def get_node(self, id: int) -> Record:
@@ -134,7 +134,7 @@ class Adcp(object):
             'MATCH (n) WHERE id(n) = {id} RETURN n.name as name, id(n) as id',
             id=id)
         while result.forward():
-            cur = result.current()
+            cur = result.current
             return cur
 
     def search(self, name: str, lang: str = 'en', operator: str = 'STARTS WITH') -> Iterator[Record]:
@@ -144,7 +144,7 @@ class Adcp(object):
             'MATCH (n) WHERE n.name %s {name} RETURN DISTINCT n.name as name, id(n) as id' % operator,
             name=search_str)
         while result.forward():
-            cur = result.current()
+            cur = result.current
             yield cur
 
     def __get_rels(self, relations: Dict, source: str) -> Iterator:
@@ -175,35 +175,37 @@ class Adcp(object):
         nodes = dict()
 
         # Step 1 : cut all direct relationships
-        for edge in graph.relationships():
-            source = edge.start_node()['name']
-            nodes.setdefault(source, edge.start_node())
+        for edge in graph.relationships:
+            source = edge.start_node['name']
+            nodes.setdefault(source, edge.start_node)
 
-            target = edge.end_node()['name']
-            nodes.setdefault(target, edge.end_node())
+            target = edge.end_node['name']
+            nodes.setdefault(target, edge.end_node)
+
+            edge_type = type(edge).__name__
 
             denied = []
             for x in self.__denied_ace:
                 try:
-                    if x['dnMaster:START_ID'] == source and x['dnSlave:END_ID'] == target and x['keyword:TYPE'] == edge.type():
+                    if x['dnMaster:START_ID'] == source and x['dnSlave:END_ID'] == target and x['keyword:TYPE'] == edge_type:
                         denied.append(x)
                 except:
-                    if x[':START_ID'] == source and x[':END_ID'] == target and x[':TYPE'] == edge.type():
+                    if x[':START_ID'] == source and x[':END_ID'] == target and x[':TYPE'] == edge_type:
                         denied.append(x)
 
             if len(denied) > 0:
-                self.logger.debug('DENY edge (%s) --[%s]--> (%s)', source, edge.type(), target)
+                self.logger.debug('DENY edge (%s) --[%s]--> (%s)', source, edge_type, target)
                 edge['DENY'] = '1'
 
         # Step 2 : build relation map
-        for edge in graph.relationships():
+        for edge in graph.relationships:
             if edge['denied']:
                 continue
-            source = edge.start_node()['name']
-            target = edge.end_node()['name']
+            source = edge.start_node['name']
+            target = edge.end_node['name']
             rels.setdefault(source, dict())
             rels[source].setdefault(target, [])
-            rels[source][target].append(edge.type())
+            rels[source][target].append(type(edge).__name__)
 
         # Step 3 : map denied to relationships
         nolink_nodes = []
@@ -234,7 +236,7 @@ class Adcp(object):
                 nolink_nodes.append(source)
 
         # Step 4 : tag unlinked nodes
-        for node in graph.nodes():
+        for node in graph.nodes:
             if node['name'] in nolink_nodes:
                 node['NO_LINKS'] = True
 
@@ -244,12 +246,13 @@ class Adcp(object):
         # List edges
         edge_dict = dict()
         edge_deny = dict()
-        for edge in graph.relationships():
-            source = edge.start_node()['name']
-            target = edge.end_node()['name']
+        for edge in graph.relationships:
+            source = edge.start_node['name']
+            target = edge.end_node['name']
             edge_dict.setdefault(source + target, [])
-            if not edge.type() in edge_dict[source + target]:
-                edge_dict[source + target].append(edge.type())
+            edge_type = type(edge).__name__
+            if not edge_type in edge_dict[source + target]:
+                edge_dict[source + target].append(edge_type)
             else:
                 edge['__drop__'] = 1
 
@@ -258,14 +261,14 @@ class Adcp(object):
 
         # Group edges
         new_edges = []
-        for edge in graph.relationships():
-            source = edge.start_node()['name']
-            target = edge.end_node()['name']
+        for edge in graph.relationships:
+            source = edge.start_node['name']
+            target = edge.end_node['name']
             tags = edge_dict.get(source + target, [])
             if len(tags) > 1:
                 edge['__drop__'] = 1
                 if '__done__' not in tags:
-                    new_rel = Relationship(edge.start_node(), ','.join(tags), edge.end_node())
+                    new_rel = Relationship(edge.start_node, ','.join(tags), edge.end_node)
                     if edge_deny.get(source + target):
                         new_rel['DENY'] = 1
                     edge_dict[source + target].append('__done__')
@@ -274,8 +277,8 @@ class Adcp(object):
 
         # Build the simplified graph
         new_graph = Subgraph(
-            nodes=[x for x in graph.nodes()],
-            relationships=[x for x in graph.relationships() if not x['__drop__']] + new_edges
+            nodes=[x for x in graph.nodes],
+            relationships=[x for x in graph.relationships if not x['__drop__']] + new_edges
         )
 
         return new_graph
@@ -283,7 +286,7 @@ class Adcp(object):
     def control_graph(self, node: Record, direction: str) -> Optional[Subgraph]:
         graph = None
 
-        labels = self.neo4j.relationship_types
+        labels = self.neo4j.schema.relationship_types
         if '@' not in node['name']:
             labels = [x for x in labels if x not in EXCHANGE_LABELS]
 
@@ -302,10 +305,10 @@ class Adcp(object):
             count = 0
             while result.forward():
                 count += 1
-                cur = result.current()
-                cur['path'].start_node()['id'] = cur['n']
-                cur['path'].end_node()['id'] = cur['m']
-                subgraph = cur.subgraph()
+                cur = result.current
+                cur['path'].start_node['id'] = cur['n']
+                cur['path'].end_node['id'] = cur['m']
+                subgraph = cur.to_subgraph()
                 if not cur['m'] in nodes:
                     nodes.append(cur['m'])
 
@@ -327,20 +330,20 @@ class Adcp(object):
             self.logger.info('Empty graph')
             return graph
 
-        self.logger.info('Initial graph: %d nodes - %d edges', order(graph), size(graph))
+        self.logger.info('Initial graph: %d nodes - %d edges', len(graph.nodes), len(graph.relationships))
 
         # Step 2 : Apply DENY ACE
         start = timer()
         filtered_graph = self.__denyace(graph, node['name'])
         end = timer()
         self.logger.debug('[perf] Deny ACE : %f', (end - start))
-        self.logger.info('Filtered graph: %d nodes - %d edges', order(filtered_graph), size(filtered_graph))
+        self.logger.info('Filtered graph: %d nodes - %d edges', len(filtered_graph.nodes), len(filtered_graph.relationships))
 
         # Step 3 : Simplify the graph
         start = timer()
         simplified_graph = self.__simplify_graph(filtered_graph)
         end = timer()
         self.logger.debug('[perf] Simplify : %f', (end - start))
-        self.logger.info('Simplified graph: %d nodes - %d edges', order(simplified_graph), size(simplified_graph))
+        self.logger.info('Simplified graph: %d nodes - %d edges', len(simplified_graph.nodes), len(simplified_graph.relationships))
 
         return simplified_graph
