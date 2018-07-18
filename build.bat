@@ -12,8 +12,8 @@ if defined PYTHON36 (
     %PYTHON36% -m venv env
     .\env\Scripts\python.exe -m pip install -r requirements.txt
     .\env\Scripts\python.exe -m pip install pyinstaller
-    .\env\Scripts\pyinstaller.exe -F query.py
-    .\env\Scripts\pyinstaller.exe -F convert.py
+    .\env\Scripts\pyinstaller.exe --additional-hooks-dir=. -F query.py
+    .\env\Scripts\pyinstaller.exe --additional-hooks-dir=. -F convert.py
 ) else (
     @echo "Python3.6 not found"
     exit /B 1
